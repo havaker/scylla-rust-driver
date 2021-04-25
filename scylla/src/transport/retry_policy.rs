@@ -21,17 +21,17 @@ pub enum RetryDecision {
 }
 
 /// Specifies a policy used to decide when to retry a query
-pub trait RetryPolicy {
+pub trait RetryPolicy: Send + Sync {
     /// Called for each new query, starts a session of deciding about retries
-    fn new_session(&self) -> Box<dyn RetrySession + Send + Sync>;
+    fn new_session(&self) -> Box<dyn RetrySession>;
 
     /// Used to clone this RetryPolicy
-    fn clone_boxed(&self) -> Box<dyn RetryPolicy + Send + Sync>;
+    fn clone_boxed(&self) -> Box<dyn RetryPolicy>;
 }
 
 /// Used throughout a single query to decide when to retry it
 /// After this query is finished it is destroyed or reset
-pub trait RetrySession {
+pub trait RetrySession: Send + Sync {
     /// Called after the query failed - decide what to do next
     fn decide_should_retry(&mut self, query_info: QueryInfo) -> RetryDecision;
 
@@ -56,11 +56,11 @@ impl Default for FallthroughRetryPolicy {
 }
 
 impl RetryPolicy for FallthroughRetryPolicy {
-    fn new_session(&self) -> Box<dyn RetrySession + Send + Sync> {
+    fn new_session(&self) -> Box<dyn RetrySession> {
         Box::new(FallthroughRetrySession)
     }
 
-    fn clone_boxed(&self) -> Box<dyn RetryPolicy + Send + Sync> {
+    fn clone_boxed(&self) -> Box<dyn RetryPolicy> {
         Box::new(FallthroughRetryPolicy)
     }
 }
@@ -90,11 +90,11 @@ impl Default for DefaultRetryPolicy {
 }
 
 impl RetryPolicy for DefaultRetryPolicy {
-    fn new_session(&self) -> Box<dyn RetrySession + Send + Sync> {
+    fn new_session(&self) -> Box<dyn RetrySession> {
         Box::new(DefaultRetrySession::new())
     }
 
-    fn clone_boxed(&self) -> Box<dyn RetryPolicy + Send + Sync> {
+    fn clone_boxed(&self) -> Box<dyn RetryPolicy> {
         Box::new(DefaultRetryPolicy)
     }
 }
