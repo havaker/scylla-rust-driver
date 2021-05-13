@@ -334,18 +334,20 @@ impl Session {
         let query: Query = query.into();
         let serialized_values = values.serialized()?;
 
-        let retry_session = match &query.config.retry_policy {
-            Some(policy) => policy.new_session(),
-            None => self.retry_policy.new_session(),
-        };
+        let retry_policy = match &query.config.retry_policy {
+            Some(policy) => policy,
+            None => &self.retry_policy,
+        }
+        .clone_boxed();
 
         Ok(RowIterator::new_for_query(
             query,
             serialized_values.into_owned(),
-            retry_session,
+            retry_policy,
             self.load_balancer.clone(),
             self.cluster.get_data(),
             self.metrics.clone(),
+            self.speculative_execution_policy.clone(),
         ))
     }
 
@@ -439,19 +441,21 @@ impl Session {
 
         let token = calculate_token(&prepared, &serialized_values)?;
 
-        let retry_session = match &prepared.config.retry_policy {
-            Some(policy) => policy.new_session(),
-            None => self.retry_policy.new_session(),
-        };
+        let retry_policy = match &prepared.config.retry_policy {
+            Some(policy) => policy,
+            None => &self.retry_policy,
+        }
+        .clone_boxed();
 
         Ok(RowIterator::new_for_prepared_statement(
             prepared,
             serialized_values.into_owned(),
             token,
-            retry_session,
+            retry_policy,
             self.load_balancer.clone(),
             self.cluster.get_data(),
             self.metrics.clone(),
+            self.speculative_execution_policy.clone(),
         ))
     }
 
