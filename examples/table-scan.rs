@@ -25,7 +25,7 @@ struct Config {
 
 async fn synchronous_scan(session: Arc<Session>, config: &Config) -> Result<usize> {
     let query_str = format!(
-        "SELECT COUNT(*) FROM {}.{}",
+        "SELECT COUNT(*) FROM {}.{} BYPASS CACHE USING TIMEOUT 5h",
         config.keyspace_name, config.table_name
     );
 
@@ -35,7 +35,7 @@ async fn synchronous_scan(session: Arc<Session>, config: &Config) -> Result<usiz
 
 async fn parallel_scan(session: Arc<Session>, config: &Config) -> Result<usize> {
     let prepare_str = format!(
-        "SELECT COUNT(*) FROM {ks}.{t} WHERE token({pk}) >= ? AND token({pk}) <= ?",
+        "SELECT COUNT(*) FROM {ks}.{t} WHERE token({pk}) >= ? AND token({pk}) <= ? BYPASS CACHE USING TIMEOUT 5h",
         ks = config.keyspace_name,
         t = config.table_name,
         pk = config.partition_key_name,
@@ -45,7 +45,7 @@ async fn parallel_scan(session: Arc<Session>, config: &Config) -> Result<usize> 
 
     let ranges = TokenFunctionSubRanges::new(config.concurrency);
     if config.show_parallel_ranges {
-        println!("ranges: {:?}", ranges.clone().collect::<Vec<_>>());
+        println!("ranges: {:x?}", ranges.clone().collect::<Vec<_>>());
     }
 
     let futures =
