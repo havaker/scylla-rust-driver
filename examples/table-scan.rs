@@ -1,8 +1,6 @@
-use anyhow::Result;
-use futures::stream::StreamExt;
+use anyhow::{anyhow, Result};
 use scylla::{
-    prepared_statement::PreparedStatement, transport::iterator::RowIterator, Session,
-    SessionBuilder,
+    prepared_statement::PreparedStatement, IntoTypedRows, QueryResult, Session, SessionBuilder,
 };
 use std::{ops::RangeInclusive, sync::Arc};
 use structopt::StructOpt;
@@ -27,17 +25,17 @@ struct Config {
 
 async fn synchronous_scan(session: Arc<Session>, config: &Config) -> Result<usize> {
     let query_str = format!(
-        "SELECT * FROM {}.{}",
+        "SELECT COUNT(*) FROM {}.{}",
         config.keyspace_name, config.table_name
     );
 
-    let row_stream = session.query_iter(query_str, &[]).await?;
-    count_rows(row_stream).await
+    let res = session.query(query_str, &[]).await?;
+    extract_count(res)
 }
 
 async fn parallel_scan(session: Arc<Session>, config: &Config) -> Result<usize> {
     let prepare_str = format!(
-        "SELECT * FROM {ks}.{t} WHERE token({pk}) >= ? AND token({pk}) <= ?",
+        "SELECT COUNT(*) FROM {ks}.{t} WHERE token({pk}) >= ? AND token({pk}) <= ?",
         ks = config.keyspace_name,
         t = config.table_name,
         pk = config.partition_key_name,
@@ -88,17 +86,16 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// collects all rows from given iterator and counts them
-async fn count_rows(mut row_stream: RowIterator) -> Result<usize> {
-    let mut count = 0;
-    while let Some(row_res) = row_stream.next().await {
-        if let Err(err) = row_res {
-            return Err(err.into());
+// extract count information from query result
+fn extract_count(res: QueryResult) -> Result<usize> {
+    if let Some(rows) = res.rows {
+        if let Some(row) = rows.into_typed::<(i64,)>().next() {
+            let (count,) = row?;
+            return Ok(count as usize);
         }
-        count += 1;
     }
 
-    Ok(count)
+    Err(anyhow!("Empty query result"))
 }
 
 #[derive(Clone)]
@@ -151,8 +148,8 @@ async fn execute_and_count(
     select_stmt: PreparedStatement,
     range: RangeInclusive<i64>,
 ) -> Result<usize> {
-    let row_stream = session
-        .execute_iter(select_stmt.clone(), (*range.start(), *range.end()))
+    let res = session
+        .execute(&select_stmt, (*range.start(), *range.end()))
         .await?;
-    count_rows(row_stream).await
+    extract_count(res)
 }
